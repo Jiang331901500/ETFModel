@@ -107,32 +107,34 @@ class DataPreprocessor:
         self.etf_code = config['etf_code']
         self.etf_holdings_dict = {}
         try:
+            # 开启mongo链接
             self.mongo_mgr = MongoDBManager()
+            # 加载预训练金融情感模型
+            self.sentiment_analyzer = pipeline(
+                "text-classification", 
+                model="yiyanghkust/finbert-tone-chinese",
+                tokenizer="yiyanghkust/finbert-tone-chinese"
+            )
         except Exception as e:
-            print("[WARN] Mongo DB not enable!")
+            self.mongo_mgr = None
+            self.sentiment_analyzer = None
+            print("[WARN] MongoDBManager and sentiment_analyzer not enabled ! So the program won't fetch data from internet.")
 
-        # 加载预训练金融情感模型
-        self.sentiment_analyzer = pipeline(
-            "text-classification", 
-            model="yiyanghkust/finbert-tone-chinese",
-            tokenizer="yiyanghkust/finbert-tone-chinese"
-        )
-
+        
         self.stopper = StopInput()
 
-    def load_data_frame(self, from_csv = False) -> bool:
-        etf_csv_path = f"{self.config['data_dir']}/{self.etf_code}_etf.csv"
-        news_csv_path = f"{self.config['data_dir']}/{self.etf_code}_news.csv"
-        if from_csv: # 直接从csv中加载数据
+    def load_data_frame(self, from_pkl = False) -> bool:
+        etf_pkl_path = f"{self.config['data_dir']}/{self.etf_code}_etf.pkl"
+        news_pkl_path = f"{self.config['data_dir']}/{self.etf_code}_news.pkl"
+        if from_pkl: # 直接从pkl中加载数据
             try:
-                self.etf_df = pd.read_csv(etf_csv_path, parse_dates=['date', 'insert_time'], index_col='date', dtype={'code': str})
-                self.news_df = pd.read_csv(news_csv_path, parse_dates=['insert_time'], dtype={'title': str, 'content': str})
-                self.news_df['title'] = self.news_df['title'].fillna("")
-                self.news_df['content'] = self.news_df['content'].fillna("")
-                print(f"Loaded ETF data from {etf_csv_path} and news data from {news_csv_path}.")
+                # 使用 read_pickle 读取完整序列化的 DataFrame
+                self.etf_df = pd.read_pickle(etf_pkl_path)
+                self.news_df = pd.read_pickle(news_pkl_path)
+                print(f"Loaded ETF data from {etf_pkl_path} and news data from {news_pkl_path}.")
                 return True
             except Exception as e:
-                print(f"Failed to load from CSV: {e}, please try to fetch from network. (from_csv=False)")
+                print(f"Failed to load from pkl: {e}, please try to fetch from network. (from_pkl=False)")
             return False
     
         # 非csv加载数据，从网络获取数据并保存到MongoDB
@@ -142,9 +144,11 @@ class DataPreprocessor:
         news_dates = pd.to_datetime(self.news_df['date'], format='%Y-%m-%d').sort_values().values
         self.etf_df = self.etf_df[(self.etf_df['date'] >= news_dates[0]) & (self.etf_df['date'] <= news_dates[-1])]
 
-        # 总是保存最新数据到csv文件中以方便部署到服务器使用
-        self.etf_df.to_csv(etf_csv_path, index=True)
-        self.news_df.to_csv(news_csv_path, index=False)
+        # 总是保存最新数据到pickle文件中以方便部署到服务器使用
+        self.etf_df.to_pickle(etf_pkl_path)
+        self.news_df.to_pickle(news_pkl_path)
+        
+        print(f"Saved ETF data to {etf_pkl_path} and news data to {news_pkl_path}.")
         return True
 
     def fetch_etf_data(self):

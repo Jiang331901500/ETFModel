@@ -31,7 +31,7 @@ class ETFDataset(Dataset):
         all_input_ids = []
         all_attention_mask = []
         all_news_weights = []
-        for single_date in self.etf_df.loc[start_date:end_date]['date'].to_list():
+        for single_date in self.etf_df.loc[start_date:end_date].index.to_list():
             date_str = single_date.strftime('%Y-%m-%d')
             # 获取当天的新闻列表
             news = self.news_dict.get(date_str)

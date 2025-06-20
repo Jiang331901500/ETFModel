@@ -24,6 +24,8 @@ class ETFDataset(Dataset):
         start_date = self.etf_df.index[idx]
         
         # 技术特征序列
+        self.etf_df['vol'] = self.etf_df['vol'] / 1e6 # 百万
+        self.etf_df['amount'] = self.etf_df['amount'] / 1e8 # 亿
         tech_data = self.etf_df.loc[start_date:end_date][self.tech_cols]
         tech_tensor = torch.tensor(tech_data.values, dtype=torch.float32)
         

@@ -18,13 +18,13 @@ config = {
     'max_news_length': 386,
 
     'trainer_config': {
-        'batch_size': 8,
-        'num_epochs': 200,
-        'patience': 10,
+        'batch_size': 1,
+        'num_epochs': 2000,
+        'patience': 20,
         'grad_clip': 1.0,
 
         'checkpoint_path': '/root/autodl-tmp/checkpoint' if os.path.exists('/root/autodl-tmp') else 'checkpoint/',
-        'checkpoint_interval': 5,
+        'checkpoint_interval': 20,
         'model_save_path': '/root/autodl-tmp/model' if os.path.exists('/root/autodl-tmp') else 'model/',
     },
 

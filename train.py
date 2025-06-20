@@ -4,6 +4,7 @@ from trainer import Trainer
 from data_preprocessor import DataPreprocessor
 from etf_dataset import ETFDataset
 from transformers import AutoTokenizer
+import os
 
 # 全局配置参数
 config = {
@@ -12,23 +13,23 @@ config = {
     'etf_code': '510500',
 
     'data_dir': 'data',
-    'sample_sequence_window': 90,
-    'max_news_per_day': 20,
-    'max_news_length': 456,
+    'sample_sequence_window': 60,
+    'max_news_per_day': 10,
+    'max_news_length': 386,
 
     'trainer_config': {
-        'batch_size': 16,
-        'num_epochs': 100,
+        'batch_size': 8,
+        'num_epochs': 200,
         'patience': 10,
         'grad_clip': 1.0,
 
-        'checkpoint_path': 'checkpoint/',
-        'checkpoint_interval': 4,
-        'model_save_path': 'model/',
+        'checkpoint_path': '/root/autodl-tmp/checkpoint' if os.path.exists('/root/autodl-tmp') else 'checkpoint/',
+        'checkpoint_interval': 5,
+        'model_save_path': '/root/autodl-tmp/model' if os.path.exists('/root/autodl-tmp') else 'model/',
     },
 
     'model_config': {
-        'news_emb_aggregate_output_size': 256,
+        'news_emb_aggregate_output_size': 128,
         'fusion_hidden': 256,
         'tech_feature_dim': 12,
         'pred_days': 5,

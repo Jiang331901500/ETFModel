@@ -141,7 +141,6 @@ class Trainer():
                 
                 # 前向传播
                 outputs = self.model(tech_data, input_ids, attention_mask, news_weights)
-                
                 # 计算损失
                 loss = self.criterion(outputs, targets)
                 train_loss += loss.item()
@@ -265,7 +264,7 @@ class Trainer():
                 input_ids = batch['input_ids'][0].unsqueeze(0).to(self.device)
                 attention_mask = batch['attention_mask'][0].unsqueeze(0).to(self.device)
                 news_weights = batch['news_weights'][0].unsqueeze(0).to(self.device)
-                
-                outputs = self.model(tech_data, input_ids, attention_mask, news_weights)
+                with torch.autocast(device_type=self.device.type):
+                    outputs = self.model(tech_data, input_ids, attention_mask, news_weights)
                 print(outputs)
                 break

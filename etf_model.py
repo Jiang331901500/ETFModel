@@ -10,7 +10,7 @@ class ETFModel(nn.Module):
         # 新闻编码器
         self.news_encoder = NewsEncoder(config)
         
-        # 特征融合层 (技术特征12维 + 新闻特征256维)
+        # 特征融合层 (技术特征12维 + 新闻特征128维)
         fusion_hidden: int = config['fusion_hidden']
         self.fusion = nn.Sequential(
             nn.Linear(config['tech_feature_dim'] + config['news_emb_aggregate_output_size'], fusion_hidden),
@@ -63,7 +63,7 @@ class ETFModel(nn.Module):
             news_weights=news_weights_reshaped
         )
 
-        # 恢复为 [batch, seq_len, 256]
+        # 恢复为 [batch, seq_len, hidden_dim]
         news_tensor = news_features.view(batch_size, seq_len, -1)
         
         # 融合技术特征和新闻特征

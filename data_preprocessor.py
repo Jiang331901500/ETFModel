@@ -101,32 +101,37 @@ class DataPreprocessor:
         '财新网': 1.0,
     }
 
-    def __init__(self, config: dict, tokenizer):
+    def __init__(self, config: dict, tokenizer, from_pkl = False):
         self.tokenizer = tokenizer
         self.config = config
         self.etf_code = config['etf_code']
         self.etf_holdings_dict = {}
-        try:
-            # 开启mongo链接
-            self.mongo_mgr = MongoDBManager()
-            # 加载预训练金融情感模型
-            self.sentiment_analyzer = pipeline(
-                "text-classification", 
-                model="yiyanghkust/finbert-tone-chinese",
-                tokenizer="yiyanghkust/finbert-tone-chinese"
-            )
-        except Exception as e:
+        self.from_pkl = from_pkl
+        if not self.from_pkl:
+            try:
+                # 开启mongo链接
+                self.mongo_mgr = MongoDBManager()
+                # 加载预训练金融情感模型
+                self.sentiment_analyzer = pipeline(
+                    "text-classification", 
+                    model="yiyanghkust/finbert-tone-chinese",
+                    tokenizer="yiyanghkust/finbert-tone-chinese"
+                )
+            except Exception as e:
+                self.mongo_mgr = None
+                self.sentiment_analyzer = None
+                print("[WARN] MongoDBManager and sentiment_analyzer not enabled ! So the program won't fetch data from internet.")
+        else:
             self.mongo_mgr = None
             self.sentiment_analyzer = None
             print("[WARN] MongoDBManager and sentiment_analyzer not enabled ! So the program won't fetch data from internet.")
-
         
         self.stopper = StopInput()
 
-    def load_data_frame(self, from_pkl = False) -> bool:
+    def load_data_frame(self) -> bool:
         etf_pkl_path = f"{self.config['data_dir']}/{self.etf_code}_etf.pkl"
         news_pkl_path = f"{self.config['data_dir']}/{self.etf_code}_news.pkl"
-        if from_pkl: # 直接从pkl中加载数据
+        if self.from_pkl: # 直接从pkl中加载数据
             try:
                 # 使用 read_pickle 读取完整序列化的 DataFrame
                 self.etf_df = pd.read_pickle(etf_pkl_path)

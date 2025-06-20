@@ -44,7 +44,7 @@ if __name__ == "__main__":
     device = torch.device(config['device'])
     tokenizer = AutoTokenizer.from_pretrained("yiyanghkust/finbert-tone-chinese")
     # 准备数据
-    dp = DataPreprocessor(config, tokenizer)
+    dp = DataPreprocessor(config, tokenizer, from_pkl=True)
     dp.load_data_frame()
     ds = ETFDataset(dp.etf_df, dp.preprocess_news(), tokenizer, config['sample_sequence_window'], config['model_config']['pred_days'])
     # 初始化训练器

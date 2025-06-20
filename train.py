@@ -13,7 +13,7 @@ config = {
     'etf_code': '510500',
 
     'data_dir': 'data',
-    'sample_sequence_window': 60,
+    'sample_sequence_window': 30,
     'max_news_per_day': 10,
     'max_news_length': 386,
 

@@ -106,7 +106,10 @@ class DataPreprocessor:
         self.config = config
         self.etf_code = config['etf_code']
         self.etf_holdings_dict = {}
-        self.mongo_mgr = MongoDBManager()
+        try:
+            self.mongo_mgr = MongoDBManager()
+        except Exception as e:
+            print("[WARN] Mongo DB not enable!")
 
         # 加载预训练金融情感模型
         self.sentiment_analyzer = pipeline(

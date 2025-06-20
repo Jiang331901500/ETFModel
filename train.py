@@ -18,14 +18,14 @@ config = {
     'max_news_length': 386,
 
     'trainer_config': {
-        'batch_size': 1,
+        'batch_size': 3,
         'num_epochs': 2000,
-        'patience': 20,
+        'patience': 10,
         'grad_clip': 1.0,
 
-        'checkpoint_path': '/root/autodl-tmp/checkpoint' if os.path.exists('/root/autodl-tmp') else 'checkpoint/',
-        'checkpoint_interval': 20,
-        'model_save_path': '/root/autodl-tmp/model' if os.path.exists('/root/autodl-tmp') else 'model/',
+        'checkpoint_path': '/root/autodl-tmp/checkpoint/' if os.path.exists('/root/autodl-tmp') else 'checkpoint/',
+        'checkpoint_interval': 1,
+        'model_save_path': '/root/autodl-tmp/model/' if os.path.exists('/root/autodl-tmp') else 'model/',
     },
 
     'model_config': {
@@ -42,6 +42,7 @@ config = {
 if __name__ == "__main__":
     pd.options.mode.copy_on_write = True
     device = torch.device(config['device'])
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"  # 禁用并行处理，消除警告
     tokenizer = AutoTokenizer.from_pretrained("yiyanghkust/finbert-tone-chinese")
     # 准备数据
     dp = DataPreprocessor(config, tokenizer, from_pkl=True)

@@ -11,7 +11,7 @@ class WeightedHuberLoss(nn.Module):
     时间加权Huber损失函数
     更重视近期预测的准确性
     """
-    def __init__(self, delta=0.1, decay=0.8):
+    def __init__(self, delta=0.5, decay=0.9):
         super().__init__()
         self.delta = delta
         self.decay = decay
@@ -33,7 +33,7 @@ class WeightedHuberLoss(nn.Module):
         return torch.mean(weighted_loss)
     
 
-def create_optimizer(model: ETFModel, bert_lr=1e-5, agg_lr=1e-3, gru_lr=1e-3, head_lr=1e-3):
+def create_optimizer(model: ETFModel, bert_lr=1e-5, agg_lr=1e-4, gru_lr=1e-3, head_lr=1e-3):
     params_group = [
         # BERT参数 (较低学习率)
         {'params': model.news_encoder.bert.parameters(), 'lr': bert_lr},
@@ -75,7 +75,7 @@ class Trainer():
             self.optimizer,
             mode='min',          # Reduce LR when the monitored metric stops decreasing
             factor=0.5,         # Multiply LR by this factor when reducing
-            patience=5,         # Number of epochs with no improvement after which LR will be reduced
+            patience=2,         # Number of epochs with no improvement after which LR will be reduced
         )
 
         self.model_name = config['etf_code'] + '_etf_model'
@@ -91,7 +91,7 @@ class Trainer():
         
         # shuffle=False确保样本不被打乱顺序 Create data loader with shuffle=False to maintain sequence order
         self.train_loader = DataLoader(train_dataset, batch_size=self.config['batch_size'], 
-                shuffle=False, num_workers=4, pin_memory=True)
+                shuffle=True, num_workers=4, pin_memory=True)
         self.val_loader = DataLoader(val_dataset, batch_size=self.config['batch_size'], 
                             shuffle=False, num_workers=2)
         self.test_loader = DataLoader(test_dataset, batch_size=self.config['batch_size'], 
@@ -130,7 +130,7 @@ class Trainer():
             train_loss = 0
             for batch_idx, batch in enumerate(self.train_loader):
                 if batch_idx % 4 == 0:
-                    print(f"Epoch {epoch+1}/{num_epochs} | Train Batch {batch_idx+1}/{len(self.train_loader)}")
+                    print(f"--- Epoch {epoch+1}/{num_epochs} | Train Batch {batch_idx+1}/{len(self.train_loader)}")
                 tech_data = batch['tech_data'].to(self.device)
                 input_ids = batch['input_ids'].to(self.device)
                 attention_mask = batch['attention_mask'].to(self.device)
@@ -182,7 +182,7 @@ class Trainer():
             print(f'*** Epoch {epoch+1}/{num_epochs} | '
                 f'Train Loss: {avg_train_loss:.6f} | '
                 f'Val Loss: {avg_val_loss:.6f} | '
-                f'LR: {self.optimizer.param_groups[0]["lr"]:.2e}')
+                f'LR: agg_lr={self.optimizer.param_groups[1]["lr"]:.2e} gru_lr={self.optimizer.param_groups[2]["lr"]:.2e}')
             
             # 早停检查
             if avg_val_loss < best_val_loss:
@@ -256,7 +256,7 @@ class Trainer():
         print(f'@@@ Average Direction Accuracy: {np.mean(daily_acc):.4f}')
 
     def test_predict(self):
-        # 测试评估
+        # 测试输出
         self.model.eval()
         with torch.no_grad():
             for batch in self.test_loader:

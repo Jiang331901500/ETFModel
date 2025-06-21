@@ -374,9 +374,9 @@ class DataPreprocessor:
         self.etf_df.index = self.etf_df['date']
         self.etf_df = self.etf_df.sort_index()
         self.calculate_technical_indicators()
-        # 使用列delta/100来计算未来5日的涨跌幅作为目标值target_{i}
+        # 使用列delta（单位pt）来计算未来5日的涨跌幅作为目标值target_{i}
         for i in range(1, 6):
-            self.etf_df[f'target_{i}'] = (self.etf_df['delta'].shift(-i) / 100.0).round(4)
+            self.etf_df[f'target_{i}'] = self.etf_df['delta'].shift(-i).round(4)
     
     # 获取ETF持仓成分股词典
     def get_etf_holdings(self):

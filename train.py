@@ -42,7 +42,7 @@ config = {
 if __name__ == "__main__":
     pd.options.mode.copy_on_write = True
     device = torch.device(config['device'])
-    os.environ["TOKENIZERS_PARALLELISM"] = "false"  # 禁用并行处理，消除警告
+    os.environ["TOKENIZERS_PARALLELISM"] = "true"  # 禁用并行处理，消除警告
     tokenizer = AutoTokenizer.from_pretrained("yiyanghkust/finbert-tone-chinese")
     # 准备数据
     dp = DataPreprocessor(config, tokenizer, from_pkl=True)

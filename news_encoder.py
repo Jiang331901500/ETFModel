@@ -9,14 +9,7 @@ class NewsEncoder(nn.Module):
         self.embed_dim = self.bert.config.hidden_size
         
         # 冻结底层参数
-        # 选项1: 完全冻结 → 仅训练聚合层
         self.bert.requires_grad_(False)
-        # 选项2: 部分解冻 → 微调高层
-        # for name, param in self.bert.named_parameters():
-        #     if "layer.11" in name or "layer.10" in name:  # 最后2层
-        #         param.requires_grad = True
-        # 选项3: 完全微调 → 所有层参与训练
-        # (不添加任何冻结代码)
         
         # 新闻聚合层（压缩维度，平衡新闻特征与技术指标特征）
         self.aggregate = nn.Sequential(
@@ -36,13 +29,16 @@ class NewsEncoder(nn.Module):
         # 展平处理
         flat_ids = input_ids.view(-1, seq_len) # [batch * num_news, seq_len]
         flat_mask = attention_mask.view(-1, seq_len) # [batch * num_news, seq_len]
-        
-        # BERT处理
-        outputs = self.bert(
-            input_ids=flat_ids,
-            attention_mask=flat_mask,
-            return_dict=True
-        )
+
+        # 确保bert底层的dropout不工作
+        self.bert.eval()
+        with torch.no_grad():
+            # BERT处理
+            outputs = self.bert(
+                input_ids=flat_ids,
+                attention_mask=flat_mask,
+                return_dict=True
+            )
         
         # 获取[CLS]标记
         cls_vectors = outputs.last_hidden_state[:, 0, :]

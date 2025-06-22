@@ -16,7 +16,7 @@ class ETFModel(nn.Module):
             nn.Linear(config['tech_feature_dim'] + config['news_emb_aggregate_output_size'], fusion_hidden),
             nn.LayerNorm(fusion_hidden),
             nn.ReLU(),
-            nn.Dropout(0.3)
+            nn.Dropout(0.2)
         )
         
         # 时序建模 (双向GRU)

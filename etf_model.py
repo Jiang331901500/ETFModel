@@ -26,19 +26,16 @@ class ETFModel(nn.Module):
             hidden_size=gru_hidden,
             num_layers=2,
             batch_first=True,
-            bidirectional=False,
+            bidirectional=True,
             dropout=0.3
         )
         
         # 多日预测头 (分层结构)
-        self.prediction_heads = nn.ModuleList([
-            nn.Sequential(
-                nn.Linear(gru_hidden, 64),
-                nn.ReLU(),
-                nn.Linear(64, 1),
-                nn.Tanh()  # 限制输出在[-1,1]对应涨跌幅
-            ) for _ in range(self.pred_days)
-        ])
+        self.prediction_heads = nn.Sequential(
+            nn.Linear(gru_hidden*2, 128),
+            nn.GELU(),
+            nn.Linear(128, self.pred_days)
+        )
     
     def forward(self, tech_data, input_ids, attention_mask, news_weights):
         """        
@@ -63,22 +60,18 @@ class ETFModel(nn.Module):
             news_weights=news_weights_reshaped
         )
 
-        # 恢复为 [batch, seq_len, hidden_dim]
+        # 恢复为 [batch, seq_len, output_dim]
         news_tensor = news_features.view(batch_size, seq_len, -1)
         
         # 融合技术特征和新闻特征
         combined = torch.cat([tech_data, news_tensor], dim=-1)
-        fused = self.fusion(combined)
+        fused = self.fusion(combined) # [batch, seq_len, output_dim]
         
         # GRU时序处理
         gru_out, _ = self.gru(fused)
         
-        # 取最后一个时间步 [batch, hidden_dim]
+        # 取最后一个时间步 [batch, hidden_dim*2]
         last_state = gru_out[:, -1, :]
         
         # 多日预测
-        predictions = []
-        for i in range(self.pred_days):
-            predictions.append(self.prediction_heads[i](last_state))
-        
-        return torch.cat(predictions, dim=1)  # [batch, pred_days]
+        return self.prediction_heads(last_state)  # [batch, pred_days]

@@ -1,5 +1,6 @@
 import torch.nn as nn
 import torch
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import numpy as np
 from etf_model import ETFModel
@@ -11,7 +12,7 @@ class WeightedHuberLoss(nn.Module):
     时间加权Huber损失函数
     更重视近期预测的准确性
     """
-    def __init__(self, delta=0.5, decay=0.9):
+    def __init__(self, delta=0.5, decay=0.5):
         super().__init__()
         self.delta = delta
         self.decay = decay
@@ -31,9 +32,8 @@ class WeightedHuberLoss(nn.Module):
         # 时间加权
         weighted_loss = loss * self.weights.to(loss.device)
         return torch.mean(weighted_loss)
-    
 
-def create_optimizer(model: ETFModel, bert_lr=1e-5, agg_lr=1e-4, gru_lr=1e-3, head_lr=1e-3):
+def create_optimizer(model: ETFModel, bert_lr=1e-5, agg_lr=1e-3, gru_lr=1e-2, head_lr=1e-2):
     params_group = [
         # BERT参数 (较低学习率)
         {'params': model.news_encoder.bert.parameters(), 'lr': bert_lr},

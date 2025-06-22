@@ -12,4 +12,4 @@ echo "Training started in background. Check train.log for output."
 # tail -f train.log
 
 # To stop the training process, you can use the following command:
-# pkill -f "python train.py"
+# pkill -f "python -u train.py"

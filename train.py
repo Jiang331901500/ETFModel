@@ -54,5 +54,7 @@ if __name__ == "__main__":
     # 训练模型
     trainer.train()
     # 测试
+    trainer.load_trained_model()
     trainer.test()
+    # trainer.test_next_day_dir_accuracy()
     

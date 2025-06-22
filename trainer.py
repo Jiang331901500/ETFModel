@@ -214,7 +214,7 @@ class Trainer():
     def load_trained_model(self):
         # 加载最佳模型
         model_save_path = self.config['model_save_path'] + self.model_name + '.pth'
-        self.model.load_state_dict(torch.load(model_save_path, map_location=self.device), weights_only=False)
+        self.model.load_state_dict(torch.load(model_save_path, map_location=self.device, weights_only=False))
 
     def test(self):
         # 测试评估

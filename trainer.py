@@ -210,9 +210,11 @@ class Trainer():
                     'history': history
                 }
                 torch.save(checkpoint, checkpoint_path)
-        
+    
+    def load_trained_model(self):
         # 加载最佳模型
-        self.model.load_state_dict(torch.load(model_save_path, map_location=self.device))
+        model_save_path = self.config['model_save_path'] + self.model_name + '.pth'
+        self.model.load_state_dict(torch.load(model_save_path, map_location=self.device), weights_only=False)
 
     def test(self):
         # 测试评估
@@ -255,16 +257,32 @@ class Trainer():
         
         print(f'@@@ Average Direction Accuracy: {np.mean(daily_acc):.4f}')
 
-    def test_predict(self):
-        # 测试输出
+    def test_next_day_dir_accuracy(self):
         self.model.eval()
+        all_preds = []
+        all_targets = []
+        
         with torch.no_grad():
-            for batch in self.test_loader:
-                tech_data = batch['tech_data'][0].unsqueeze(0).to(self.device)
-                input_ids = batch['input_ids'][0].unsqueeze(0).to(self.device)
-                attention_mask = batch['attention_mask'][0].unsqueeze(0).to(self.device)
-                news_weights = batch['news_weights'][0].unsqueeze(0).to(self.device)
-                with torch.autocast(device_type=self.device.type):
-                    outputs = self.model(tech_data, input_ids, attention_mask, news_weights)
-                print(outputs)
-                break
+            for batch_idx, batch in enumerate(self.test_loader):
+                if batch_idx % 4 == 0:
+                    print(f"@@@ Batch {batch_idx+1}/{len(self.test_loader)}")
+                tech_data = batch['tech_data'].to(self.device)
+                input_ids = batch['input_ids'].to(self.device)
+                attention_mask = batch['attention_mask'].to(self.device)
+                news_weights = batch['news_weights'].to(self.device)
+                targets = batch['targets'].to(self.device)
+                
+                outputs = self.model(tech_data, input_ids, attention_mask, news_weights)
+                
+                all_preds.append(outputs.cpu().numpy())
+                all_targets.append(targets.cpu().numpy())
+        
+        # 计算方向准确性
+        preds_array = np.vstack(all_preds)
+        targets_array = np.vstack(all_targets)
+        
+        # 计算每日方向准确率
+        correct = np.sign(preds_array[:, 0]) == np.sign(targets_array[:, 0])
+        acc = correct.mean()
+        
+        print(f'@@@ Average +1 Day Direction Accuracy: {np.mean(acc):.4f}')

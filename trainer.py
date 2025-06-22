@@ -282,7 +282,35 @@ class Trainer():
         targets_array = np.vstack(all_targets)
         
         # 计算每日方向准确率
-        correct = np.sign(preds_array[:, 0]) == np.sign(targets_array[:, 0])
-        acc = correct.mean()
+        correct_0_05 = ((np.sign(preds_array[:, 0]) == np.sign(targets_array[:, 0])) | 
+                   (np.abs(preds_array[:, 0] - targets_array[:, 0]) <= 0.05))
+        acc_0_05 = correct_0_05.mean()
+        correct_0_1 = ((np.sign(preds_array[:, 0]) == np.sign(targets_array[:, 0])) | 
+                   (np.abs(preds_array[:, 0] - targets_array[:, 0]) <= 0.1))
+        acc_0_1 = correct_0_1.mean()
+        correct_0_5 = ((np.sign(preds_array[:, 0]) == np.sign(targets_array[:, 0])) | 
+                   (np.abs(preds_array[:, 0] - targets_array[:, 0]) <= 0.5))
+        acc_0_5 = correct_0_5.mean()
+        correct_1_0 = ((np.sign(preds_array[:, 0]) == np.sign(targets_array[:, 0])) | 
+                   (np.abs(preds_array[:, 0] - targets_array[:, 0]) <= 1.0))
+        acc_1_0 = correct_1_0.mean()
         
-        print(f'@@@ Average +1 Day Direction Accuracy: {np.mean(acc):.4f}')
+        print(f'@@@ Threshold=±0.05% Average +1 Day Direction Accuracy: {np.mean(acc_0_05):.4f}')
+        print(f'@@@ Threshold=±0.1% Average +1 Day Direction Accuracy: {np.mean(acc_0_1):.4f}')
+        print(f'@@@ Threshold=±0.5% Average +1 Day Direction Accuracy: {np.mean(acc_0_5):.4f}')
+        print(f'@@@ Threshold=±1.0% Average +1 Day Direction Accuracy: {np.mean(acc_1_0):.4f}')
+
+        # 计算每日数值准确率
+        correct_0_05 = (np.abs(preds_array[:, 0] - targets_array[:, 0]) <= 0.05)
+        acc_0_05 = correct_0_05.mean()
+        correct_0_1 = (np.abs(preds_array[:, 0] - targets_array[:, 0]) <= 0.1)
+        acc_0_1 = correct_0_1.mean()
+        correct_0_5 = (np.abs(preds_array[:, 0] - targets_array[:, 0]) <= 0.5)
+        acc_0_5 = correct_0_5.mean()
+        correct_1_0 = (np.abs(preds_array[:, 0] - targets_array[:, 0]) <= 1.0)
+        acc_1_0 = correct_1_0.mean()
+        
+        print(f'@@@ Threshold=±0.05% Average +1 Day Value Accuracy: {np.mean(acc_0_05):.4f}')
+        print(f'@@@ Threshold=±0.1% Average +1 Day Value Accuracy: {np.mean(acc_0_1):.4f}')
+        print(f'@@@ Threshold=±0.5% Average +1 Day Value Accuracy: {np.mean(acc_0_5):.4f}')
+        print(f'@@@ Threshold=±1.0% Average +1 Day Value Accuracy: {np.mean(acc_1_0):.4f}')

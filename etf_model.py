@@ -30,11 +30,11 @@ class ETFModel(nn.Module):
             dropout=0.3
         )
         
-        # 多日预测头 (分层结构)
-        self.prediction_heads = nn.Sequential(
+        # 下一日涨跌情况的分类头
+        self.classification_head = nn.Sequential(
             nn.Linear(gru_hidden*2, 128),
             nn.GELU(),
-            nn.Linear(128, self.pred_days)
+            nn.Linear(128, 7)  # 7个类别：大跌、跌、微跌、平稳、微涨、涨、大涨
         )
     
     def forward(self, tech_data, input_ids, attention_mask, news_weights):
@@ -74,4 +74,4 @@ class ETFModel(nn.Module):
         last_state = gru_out[:, -1, :]
         
         # 多日预测
-        return self.prediction_heads(last_state)  # [batch, pred_days]
+        return self.classification_head(last_state)  # [batch, pred_class]

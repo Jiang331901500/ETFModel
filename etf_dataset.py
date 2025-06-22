@@ -41,13 +41,13 @@ class ETFDataset(Dataset):
             all_attention_mask.append(news['attention_mask'])
             all_news_weights.append(news['news_weights'])
         
-        # 堆叠为三维张量 [days=90, news=20, seq_len]
+        # 堆叠为三维张量 [days, news, seq_len]
         input_ids = torch.stack(all_input_ids)
         attention_mask = torch.stack(all_attention_mask)
-        # [days=90, news=20]
+        # [days, news]
         news_weights = torch.stack(all_news_weights)
         
-        # 目标值 (未来5日涨跌幅， 假设目标列为target_1, target_2, ..., target_5)
+        # 目标值 (未来5日涨跌分类， 假设目标列为target_1, target_2, ..., target_5)
         targets = self.etf_df.loc[end_date, [f'target_{i+1}' for i in range(self.pred_days)]]
         target_tensor = torch.tensor(targets.to_list(), dtype=torch.float32)
         

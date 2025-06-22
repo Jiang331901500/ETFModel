@@ -56,5 +56,4 @@ if __name__ == "__main__":
     # 测试
     trainer.load_trained_model()
     trainer.test()
-    # trainer.test_next_day_dir_accuracy()
     

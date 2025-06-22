@@ -6,33 +6,6 @@ import numpy as np
 from etf_model import ETFModel
 from etf_dataset import ETFDataset
 
-# huber损失函数定义
-class WeightedHuberLoss(nn.Module):
-    """
-    时间加权Huber损失函数
-    更重视近期预测的准确性
-    """
-    def __init__(self, delta=0.5, decay=0.5):
-        super().__init__()
-        self.delta = delta
-        self.decay = decay
-        self.weights = torch.tensor([decay ** i for i in range(5)], dtype=torch.float32)
-    
-    def forward(self, pred, target):
-        residual = torch.abs(pred - target)
-        condition = residual < self.delta
-        
-        # Huber损失计算
-        loss = torch.where(
-            condition,
-            0.5 * residual ** 2,
-            self.delta * (residual - 0.5 * self.delta)
-        )
-        
-        # 时间加权
-        weighted_loss = loss * self.weights.to(loss.device)
-        return torch.mean(weighted_loss)
-
 def create_optimizer(model: ETFModel, bert_lr=1e-5, agg_lr=1e-3, gru_lr=1e-3, head_lr=1e-3):
     params_group = [
         # BERT参数 (较低学习率)
@@ -47,8 +20,8 @@ def create_optimizer(model: ETFModel, bert_lr=1e-5, agg_lr=1e-3, gru_lr=1e-3, he
         # GRU参数
         {'params': model.gru.parameters(), 'lr': gru_lr},
         
-        # 预测头参数
-        {'params': model.prediction_heads.parameters(), 'lr': head_lr}
+        # 分类头参数
+        {'params': model.classification_head.parameters(), 'lr': head_lr}
     ]
     
     return torch.optim.AdamW(params_group, weight_decay=0.01)
@@ -57,7 +30,6 @@ def create_optimizer(model: ETFModel, bert_lr=1e-5, agg_lr=1e-3, gru_lr=1e-3, he
 class Trainer():
     model: ETFModel
     optimizer: torch.optim.Optimizer
-    criterion: WeightedHuberLoss
     scheduler: torch.optim.lr_scheduler.ReduceLROnPlateau
 
     train_loader: DataLoader
@@ -69,7 +41,7 @@ class Trainer():
         self.device = device
         self.model = ETFModel(config['model_config']).to(device)
         self.optimizer = create_optimizer(self.model)
-        self.criterion = WeightedHuberLoss().to(device)
+        self.criterion = nn.CrossEntropyLoss().to(device)
         # Learning rate scheduler
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             self.optimizer,
@@ -80,6 +52,9 @@ class Trainer():
 
         self.model_name = config['etf_code'] + '_etf_model'
 
+        # 定义分类边界
+        self.boundaries = torch.tensor([-1, -0.5, -0.1, 0.1, 0.5, 1], device=device)
+
     def init_dataloader(self, full_dataset: ETFDataset):
         train_size = int(0.8 * len(full_dataset))
         val_size = int(0.1 * len(full_dataset))
@@ -89,18 +64,27 @@ class Trainer():
         val_dataset = torch.utils.data.Subset(full_dataset, range(train_size, train_size + val_size))
         test_dataset = torch.utils.data.Subset(full_dataset, range(train_size + val_size, len(full_dataset)))
         
-        # shuffle=False确保样本不被打乱顺序 Create data loader with shuffle=False to maintain sequence order
         self.train_loader = DataLoader(train_dataset, batch_size=self.config['batch_size'], 
                 shuffle=True, num_workers=4, pin_memory=True)
         self.val_loader = DataLoader(val_dataset, batch_size=self.config['batch_size'], 
                             shuffle=False, num_workers=2)
         self.test_loader = DataLoader(test_dataset, batch_size=self.config['batch_size'], 
                             shuffle=False, num_workers=2)
+    
+    def _convert_to_class_labels(self, targets):
+        """将连续涨跌幅转换为分类标签"""
+        # 只取第一天的涨跌幅数据
+        delta_day1 = targets[:, 0]  # shape: (batch_size,)
         
+        # 使用bucketize进行分箱处理
+        labels = torch.bucketize(delta_day1.contiguous(), self.boundaries)
+        return labels
+    
     def train(self):
         best_val_loss = float('inf')
+        best_val_acc = 0.0
         epochs_no_improve = 0
-        history = {'train_loss': [], 'val_loss': []}
+        history = {'train_loss': [], 'val_loss': [], 'train_acc': [], 'val_acc': []}
 
         grad_clip = self.config['grad_clip']
         num_epochs = self.config['num_epochs']
@@ -128,6 +112,8 @@ class Trainer():
             # 训练阶段
             self.model.train()
             train_loss = 0
+            train_correct = 0
+            train_total = 0
             for batch_idx, batch in enumerate(self.train_loader):
                 if batch_idx % 4 == 0:
                     print(f"--- Epoch {epoch+1}/{num_epochs} | Train Batch {batch_idx+1}/{len(self.train_loader)}")
@@ -136,14 +122,22 @@ class Trainer():
                 attention_mask = batch['attention_mask'].to(self.device)
                 news_weights = batch['news_weights'].to(self.device)
                 targets = batch['targets'].to(self.device)
+
+                # 转换目标为分类标签 (只使用第一天数据)
+                class_labels = self._convert_to_class_labels(targets)
                 
                 self.optimizer.zero_grad()
                 
                 # 前向传播
                 outputs = self.model(tech_data, input_ids, attention_mask, news_weights)
                 # 计算损失
-                loss = self.criterion(outputs, targets)
+                loss = self.criterion(outputs, class_labels)
                 train_loss += loss.item()
+
+                # 计算准确率
+                _, predicted = torch.max(outputs.data, 1)
+                train_total += class_labels.size(0)
+                train_correct += (predicted == class_labels).sum().item()
                 
                 # 反向传播
                 loss.backward()
@@ -155,11 +149,15 @@ class Trainer():
                 self.optimizer.step()
             
             avg_train_loss = train_loss / len(self.train_loader)
+            train_acc = train_correct / train_total
             history['train_loss'].append(avg_train_loss)
+            history['train_acc'].append(train_acc)
             
             # 验证阶段
             self.model.eval()
             val_loss = 0
+            val_correct = 0
+            val_total = 0
             with torch.no_grad():
                 for batch_idx, batch in enumerate(self.val_loader):
                     if batch_idx % 4 == 0:
@@ -169,23 +167,35 @@ class Trainer():
                     attention_mask = batch['attention_mask'].to(self.device)
                     news_weights = batch['news_weights'].to(self.device)
                     targets = batch['targets'].to(self.device)
+
+                    # 转换目标为分类标签
+                    class_labels = self._convert_to_class_labels(targets)
                     
                     outputs = self.model(tech_data, input_ids, attention_mask, news_weights)
-                    loss = self.criterion(outputs, targets)
+                    loss = self.criterion(outputs, class_labels)
                     val_loss += loss.item()
+
+                    # 计算准确率
+                    _, predicted = torch.max(outputs.data, 1)
+                    val_total += class_labels.size(0)
+                    val_correct += (predicted == class_labels).sum().item()
             
             avg_val_loss = val_loss / len(self.val_loader)
+            val_acc = val_correct / val_total
             history['val_loss'].append(avg_val_loss)
+            history['val_acc'].append(val_acc)
+
             self.scheduler.step(avg_val_loss)
             
             # 打印进度
             print(f'*** Epoch {epoch+1}/{num_epochs} | '
-                f'Train Loss: {avg_train_loss:.6f} | '
-                f'Val Loss: {avg_val_loss:.6f} | '
+                f'Train Loss: {avg_train_loss:.6f} | Val Loss: {avg_val_loss:.6f} | '
+                f'Train Acc: {train_acc:.4f} | Val Acc: {val_acc:.4f} | '
                 f'LR: agg_lr={self.optimizer.param_groups[1]["lr"]:.2e} gru_lr={self.optimizer.param_groups[2]["lr"]:.2e}')
             
-            # 早停检查
-            if avg_val_loss < best_val_loss:
+            # 早停检查 (使用验证准确率作为主要指标)
+            if val_acc > best_val_acc or (val_acc == best_val_acc and avg_val_loss < best_val_loss):
+                best_val_acc = val_acc
                 best_val_loss = avg_val_loss
                 torch.save(self.model.state_dict(), model_save_path)
                 print(f'---Saving best model at epoch {epoch+1} ...')
@@ -207,6 +217,8 @@ class Trainer():
                     'scheduler_state_dict': self.scheduler.state_dict(),
                     'train_loss': avg_train_loss,
                     'val_loss': avg_val_loss,
+                    'train_acc': train_acc,
+                    'val_acc': val_acc,
                     'history': history
                 }
                 torch.save(checkpoint, checkpoint_path)
@@ -220,8 +232,10 @@ class Trainer():
         # 测试评估
         self.model.eval()
         test_loss = 0
+        test_correct = 0
+        test_total = 0
         all_preds = []
-        all_targets = []
+        all_labels = []
         
         with torch.no_grad():
             for batch_idx, batch in enumerate(self.test_loader):
@@ -233,84 +247,26 @@ class Trainer():
                 news_weights = batch['news_weights'].to(self.device)
                 targets = batch['targets'].to(self.device)
                 
+                # 转换目标为分类标签
+                class_labels = self._convert_to_class_labels(targets)
+                
                 outputs = self.model(tech_data, input_ids, attention_mask, news_weights)
-                loss = self.criterion(outputs, targets)
+                loss = self.criterion(outputs, class_labels)
                 test_loss += loss.item()
                 
-                all_preds.append(outputs.cpu().numpy())
-                all_targets.append(targets.cpu().numpy())
+                # 计算准确率
+                _, predicted = torch.max(outputs.data, 1)
+                test_total += class_labels.size(0)
+                test_correct += (predicted == class_labels).sum().item()
+                
+                # 收集预测结果用于进一步分析
+                all_preds.extend(predicted.cpu().numpy())
+                all_labels.extend(class_labels.cpu().numpy())
         
         avg_test_loss = test_loss / len(self.test_loader)
+        test_acc = test_correct / test_total
         print(f'@@@ Test Loss: {avg_test_loss:.6f}')
+        print(f'@@@ Test Accuracy: {test_acc:.4f}')
         
-        # 计算方向准确性
-        preds_array = np.vstack(all_preds)
-        targets_array = np.vstack(all_targets)
-        
-        # 计算每日方向准确率
-        daily_acc = []
-        for i in range(5):
-            correct = np.sign(preds_array[:, i]) == np.sign(targets_array[:, i])
-            acc = correct.mean()
-            daily_acc.append(acc)
-            print(f'@@@ Day {i+1} Direction Accuracy: {acc:.4f}')
-        
-        print(f'@@@ Average Direction Accuracy: {np.mean(daily_acc):.4f}')
-
-    def test_next_day_dir_accuracy(self):
-        self.model.eval()
-        all_preds = []
-        all_targets = []
-        
-        with torch.no_grad():
-            for batch_idx, batch in enumerate(self.test_loader):
-                if batch_idx % 4 == 0:
-                    print(f"@@@ Batch {batch_idx+1}/{len(self.test_loader)}")
-                tech_data = batch['tech_data'].to(self.device)
-                input_ids = batch['input_ids'].to(self.device)
-                attention_mask = batch['attention_mask'].to(self.device)
-                news_weights = batch['news_weights'].to(self.device)
-                targets = batch['targets'].to(self.device)
-                
-                outputs = self.model(tech_data, input_ids, attention_mask, news_weights)
-                
-                all_preds.append(outputs.cpu().numpy())
-                all_targets.append(targets.cpu().numpy())
-        
-        # 计算方向准确性
-        preds_array = np.vstack(all_preds)
-        targets_array = np.vstack(all_targets)
-        
-        # 计算每日方向准确率
-        correct_0_05 = ((np.sign(preds_array[:, 0]) == np.sign(targets_array[:, 0])) | 
-                   (np.abs(preds_array[:, 0] - targets_array[:, 0]) <= 0.05))
-        acc_0_05 = correct_0_05.mean()
-        correct_0_1 = ((np.sign(preds_array[:, 0]) == np.sign(targets_array[:, 0])) | 
-                   (np.abs(preds_array[:, 0] - targets_array[:, 0]) <= 0.1))
-        acc_0_1 = correct_0_1.mean()
-        correct_0_5 = ((np.sign(preds_array[:, 0]) == np.sign(targets_array[:, 0])) | 
-                   (np.abs(preds_array[:, 0] - targets_array[:, 0]) <= 0.5))
-        acc_0_5 = correct_0_5.mean()
-        correct_1_0 = ((np.sign(preds_array[:, 0]) == np.sign(targets_array[:, 0])) | 
-                   (np.abs(preds_array[:, 0] - targets_array[:, 0]) <= 1.0))
-        acc_1_0 = correct_1_0.mean()
-        
-        print(f'@@@ Threshold=±0.05% Average +1 Day Direction Accuracy: {np.mean(acc_0_05):.4f}')
-        print(f'@@@ Threshold=±0.1% Average +1 Day Direction Accuracy: {np.mean(acc_0_1):.4f}')
-        print(f'@@@ Threshold=±0.5% Average +1 Day Direction Accuracy: {np.mean(acc_0_5):.4f}')
-        print(f'@@@ Threshold=±1.0% Average +1 Day Direction Accuracy: {np.mean(acc_1_0):.4f}')
-
-        # 计算每日数值准确率
-        correct_0_05 = (np.abs(preds_array[:, 0] - targets_array[:, 0]) <= 0.05)
-        acc_0_05 = correct_0_05.mean()
-        correct_0_1 = (np.abs(preds_array[:, 0] - targets_array[:, 0]) <= 0.1)
-        acc_0_1 = correct_0_1.mean()
-        correct_0_5 = (np.abs(preds_array[:, 0] - targets_array[:, 0]) <= 0.5)
-        acc_0_5 = correct_0_5.mean()
-        correct_1_0 = (np.abs(preds_array[:, 0] - targets_array[:, 0]) <= 1.0)
-        acc_1_0 = correct_1_0.mean()
-        
-        print(f'@@@ Threshold=±0.05% Average +1 Day Value Accuracy: {np.mean(acc_0_05):.4f}')
-        print(f'@@@ Threshold=±0.1% Average +1 Day Value Accuracy: {np.mean(acc_0_1):.4f}')
-        print(f'@@@ Threshold=±0.5% Average +1 Day Value Accuracy: {np.mean(acc_0_5):.4f}')
-        print(f'@@@ Threshold=±1.0% Average +1 Day Value Accuracy: {np.mean(acc_1_0):.4f}')
+        # 返回预测结果供进一步分析
+        return np.array(all_preds), np.array(all_labels)

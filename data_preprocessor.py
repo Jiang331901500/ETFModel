@@ -145,7 +145,7 @@ class DataPreprocessor:
         # 非csv加载数据，从网络获取数据并保存到MongoDB
         self.fetch_etf_data()
         self.fetch_news()
-        # etf 和 news 的日期取交集
+        # etf 和 news 的日期范围取交集
         news_dates = pd.to_datetime(self.news_df['date'], format='%Y-%m-%d').sort_values().values
         self.etf_df = self.etf_df[(self.etf_df['date'] >= news_dates[0]) & (self.etf_df['date'] <= news_dates[-1])]
 
@@ -490,6 +490,27 @@ class DataPreprocessor:
         # news_df应包含列: date, title, content, score
         max_news_per_day = self.config['max_news_per_day']
         max_length = self.config['max_news_length']
+
+        # 周末/节假日的新闻应归入到该日期之前的最后一个交易日
+        # 将etf_df的所有交易日日期转为set，便于查找
+        etf_dates = sorted(self.etf_df.index)
+        etf_dates_set = set(etf_dates)
+        # 将news_df的date列转为datetime类型（如果不是）
+        self.news_df['date'] = pd.to_datetime(self.news_df['date'])
+        # 对每条新闻，将其date调整为不晚于自身的最近一个etf交易日
+        def map_to_nearest_etf_date(news_date):
+            # 如果新闻日期正好是交易日，直接返回
+            if news_date in etf_dates_set:
+                return news_date.strftime('%Y-%m-%d')
+            # 否则，找到不晚于news_date的最大etf日期
+            idx = np.searchsorted(etf_dates, news_date, side='right') - 1
+            if idx >= 0:
+                return etf_dates[idx].strftime('%Y-%m-%d')
+            else:
+                # 如果新闻早于所有etf日期，则归入最早的etf日期
+                return etf_dates[0].strftime('%Y-%m-%d')
+        self.news_df['date'] = self.news_df['date'].apply(map_to_nearest_etf_date)
+
         # 按日期分组
         grouped = self.news_df.groupby('date')
         processed_news = {}

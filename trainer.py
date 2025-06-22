@@ -33,7 +33,7 @@ class WeightedHuberLoss(nn.Module):
         weighted_loss = loss * self.weights.to(loss.device)
         return torch.mean(weighted_loss)
 
-def create_optimizer(model: ETFModel, bert_lr=1e-5, agg_lr=1e-3, gru_lr=1e-2, head_lr=1e-2):
+def create_optimizer(model: ETFModel, bert_lr=1e-5, agg_lr=1e-3, gru_lr=1e-3, head_lr=1e-3):
     params_group = [
         # BERT参数 (较低学习率)
         {'params': model.news_encoder.bert.parameters(), 'lr': bert_lr},

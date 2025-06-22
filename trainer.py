@@ -81,17 +81,17 @@ class Trainer():
         self.model_name = config['etf_code'] + '_etf_model'
 
     def init_dataloader(self, full_dataset: ETFDataset):
-        train_size = int(0.8 * len(full_dataset))
-        val_size = int(0.1 * len(full_dataset))
+        train_size = int(0.9 * len(full_dataset))
+        overlap_size = int(0.1 * len(full_dataset))
+        val_size = int(0.15 * len(full_dataset))
         
-        # 按时间划分数据集 (避免未来信息泄露) Sequential split to maintain time order
+        # 划分数据集
         train_dataset = torch.utils.data.Subset(full_dataset, range(0, train_size))
-        val_dataset = torch.utils.data.Subset(full_dataset, range(train_size, train_size + val_size))
-        test_dataset = torch.utils.data.Subset(full_dataset, range(train_size + val_size, len(full_dataset)))
+        val_dataset = torch.utils.data.Subset(full_dataset, range(train_size - overlap_size, train_size - overlap_size + val_size))
+        test_dataset = torch.utils.data.Subset(full_dataset, range(train_size - overlap_size + val_size, len(full_dataset)))
         
-        # shuffle=False确保样本不被打乱顺序 Create data loader with shuffle=False to maintain sequence order
         self.train_loader = DataLoader(train_dataset, batch_size=self.config['batch_size'], 
-                shuffle=True, num_workers=4, pin_memory=True)
+                shuffle=False, num_workers=4, pin_memory=True)
         self.val_loader = DataLoader(val_dataset, batch_size=self.config['batch_size'], 
                             shuffle=False, num_workers=2)
         self.test_loader = DataLoader(test_dataset, batch_size=self.config['batch_size'], 
